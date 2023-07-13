@@ -1,0 +1,9 @@
+vehicles:
+  - type: uav
+    x: 0
+    y: 0
+    z: 2
+  - type: r1_rover
+    x: 0
+    y: 0
+    z: 0

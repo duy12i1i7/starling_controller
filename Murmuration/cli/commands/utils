@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# \tUtility functions
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: utils [command] (options)
+
+commands:
+    kind-load <container>\tLoads the specified local container into kind
+    get-dashboard-token\t\tGet the dashboard entry token
+
+options:
+    --name\t\tName of kind cluster (defaults to starling-cluster)
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+CLUSTER_NAME="starling-cluster"
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        --name)
+            CLUSTER_NAME=$2
+            shift
+            shift
+            ;;
+        kind-load)
+            if [[ $2 ]]; then
+                KIND_LOAD=$2
+            else
+                echo "Please specify a container name and tag"
+                cli_help_install
+            fi
+            shift
+            shift
+            ;;
+        get-dashboard-token)
+            DASH_TOKEN=1
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            ;;
+    esac
+done
+
+# Kind Load Image
+if [[ $KIND_LOAD ]]; then
+    echo "Loading local image '$KIND_LOAD' into $CLUSTER_NAME"
+
+    # Start local registry
+    reg_name="${STARLING_REGISTRY_NAME}"
+    if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true)" != 'true' ]; then
+        echo "Please ensure local registry is running first"
+        exit 1
+    fi
+
+    if [[ "$(docker image inspect ${KIND_LOAD} >/dev/null; echo $?)" == "1" ]]; then
+        echo "Image ${KIND_LOAD} does not exist, pulling from internet repository"
+        docker pull "$KIND_LOAD"
+    fi
+
+    local_registry="localhost:${STARLING_REGISTRY_DEFAULT_PORT}"
+    local_reg_container="${local_registry}/${KIND_LOAD}"
+    docker tag "${KIND_LOAD}" "${local_reg_container}"
+    docker push "${local_reg_container}"
+fi
+
+if [[ $DASH_TOKEN ]]; then
+    kubectl -n kubernetes-dashboard describe secret admin-user-token | grep ^token | cut -c 13-
+fi

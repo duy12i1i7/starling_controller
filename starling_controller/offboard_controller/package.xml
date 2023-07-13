@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>offboard_controller</name>
+  <version>0.0.0</version>
+  <description>offboard controller template</description>
+  <maintainer email="duy.nd202357@sis.hust.edu.vn">root</maintainer>
+  <license>MIT License @ NDDuy 2023</license>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>trajectory_msgs</exec_depend>
+
+  <!-- List custom message dependencies here -->
+  <!-- <exec_depend>ros2_msgs_template</exec_depend> -->
+  <exec_depend>template_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

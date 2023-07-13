@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# \tStops Starling Server
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: stop [kind/k3s] (optional)
+
+Usage:
+    No Arguments\t\tStarts kubernetes and deployment only
+    kind/k\t\tStarts kubernetes and starts the simulator deployment
+    dashboard\t\tStarts kubernetes dashboard
+
+Optional Arguments
+    --name\t\tName of cluster to delete (kind)
+    --keep_registry -kr \tKeep the registry running on delete
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        --name)
+            CLUSTER_NAME=$2
+            shift
+            shift
+            ;;
+        -kr|--keep_registry)
+            KEEP_REGISTRY=1
+            shift
+            ;;
+        kind)
+            S_KIND=1
+            shift
+            ;;
+        k3s)
+            S_K3S=1
+            shift
+            ;;
+        dashboard)
+            S_DASH=1
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            shift # past argument
+            ;;
+    esac
+done
+
+# Start k3s
+
+# STOP kind
+if [[ $S_KIND ]]; then
+    kind delete cluster --name="${CLUSTER_NAME:-starling-cluster}"
+
+    # remove registry
+    if [[ ! $KEEP_REGISTRY ]]; then
+        echo "Removing Registry"
+        docker stop "${STARLING_REGISTRY_NAME}"
+        docker rm "${STARLING_REGISTRY_NAME}"
+    else
+        echo "Registry being left, please remember to remove yourself"
+    fi
+
+    # remove temp folder
+    rm -r "${STARLING_TMP_DIR}"
+fi
+
+# Start Dashboard
+if [[ $S_DASH ]]; then
+    echo "Deleting Kubernetes Dashboard"
+    echo "==================="
+    GITHUB_URL=https://github.com/kubernetes/dashboard/releases
+    VERSION_KUBE_DASHBOARD=$(curl -w '%{url_effective}' -I -L -s -S ${GITHUB_URL}/latest -o /dev/null | sed -e 's|.*/||')
+    kubectl delete -f https://raw.githubusercontent.com/kubernetes/dashboard/${VERSION_KUBE_DASHBOARD}/aio/deploy/recommended.yaml
+    kubectl delete -f ${STARLING_WORKDIR}/kubernetes/resources/dashboard.admin.yaml #dashboard.admin-user.yml -f deployment/resources/dashboard.admin-user-role.yml
+    echo "==================="
+fi

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Starts Starling Server
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: simulator [Command] (arguments)
+
+commands:
+    No Arguments\t\tNothing
+    start\t\tStarts gazebo iris with px4 and vehicle with specified number of vehicles
+    stop\t\tStops all simulator instances
+    restart\t\tRestarts the simulator
+    load\t\tLoads local docker images into kind
+
+Arguments:
+    --load\t\tAlso loads local docker images into kind, use with start
+    --brl\t\tLoad the Bristol Robotics Laboratory flight arena simulation (digital double and motion tracking enabled)
+    --simulator_kube_deployment_yaml <file>\tSet the default simulation container deployment file
+    --sitl_kube_deployment_yaml <file>\tSet the defualt SILT container deployment file
+
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+SIM_DEPLOYMENT_FILE="${STARLING_WORKDIR}/kubernetes/simulation/k8.gazebo-iris.amd64.yaml"
+SITL_DEPLOYMENT_FILE="${STARLING_WORKDIR}/kubernetes/simulation/k8.px4-sitl.daemonset.yaml"
+
+BRL_SIM_DEPLOYMENT_FILE="${STARLING_WORKDIR}/kubernetes/simulation/k8.gazebo-brl.yaml"
+BRL_SITL_DEPLOYMENT_FILE="${STARLING_WORKDIR}/kubernetes/simulation/k8.px4-sitl-tracking.daemonset.yaml"
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        start)
+            START=1
+            shift
+            ;;
+        stop)
+            STOP=1
+            shift
+            ;;
+        restart)
+            START=1
+            STOP=1
+            shift
+            ;;
+        load|--load)
+            LOAD=1
+            shift
+            ;;
+        --brl)
+            SIM_DEPLOYMENT_FILE="$BRL_SIM_DEPLOYMENT_FILE"
+            SITL_DEPLOYMENT_FILE="$BRL_SITL_DEPLOYMENT_FILE"
+            shift
+            ;;
+        --simulator_kube_deployment_yaml)
+            SIM_DEPLOYMENT_FILE=$2
+            shift
+            shift
+            ;;
+        --sitl_kube_deployment_yaml)
+            SITL_DEPLOYMENT_FILE=$2
+            shift
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            shift # past argument
+            ;;
+    esac
+done
+
+SIMULATOR_DEPLOYMENT_LIST=(
+    "${SIM_DEPLOYMENT_FILE}"
+    "${SITL_DEPLOYMENT_FILE}"
+    "${STARLING_WORKDIR}/kubernetes/k8.mavros.daemonset.yaml"
+);
+
+if [[ $LOAD ]]; then
+    images=()
+    echo "Finding images in deployment files"
+    for file in "${SIMULATOR_DEPLOYMENT_LIST[@]}"; do
+        readarray image_lines < <(grep "image:" "$file")
+        # image_lines=("$(grep "image:" $file)")
+        for i in "${image_lines[@]}"; do
+            a1="$( echo "$i" | xargs | cut -c8- )"
+            if [[ ! "${images[*]}" =~ "${a1}" ]]; then
+                # whatever you want to do when array doesn't contain value
+                echo "Found Image Reference: '$a1'"
+                images+=( "$a1" )
+            else
+                echo "Not Adding Image Already Found $a1"
+            fi
+
+        done
+    done
+    echo
+    echo "Copying local containers across"
+    for i in "${images[@]}"; do
+        bash "${STARLING_BINDIR}/starling" utils kind-load "$i"
+    done
+    echo "All containers loaded"
+fi
+
+# Stop simlator
+if [[ $STOP ]]; then
+    echo "Stopping simulator"
+    set +e
+    kubectl delete --all daemonsets,replicasets,services,deployments,pods,rc,ingress
+    set -e
+fi
+
+
+# Start simlator
+if [[ $START ]]; then
+    echo "Starting simulator"
+    local_registry="localhost:${STARLING_REGISTRY_DEFAULT_PORT}"
+    for file in "${SIMULATOR_DEPLOYMENT_LIST[@]}"; do
+        echo "Converting to use local registry at ${local_registry}"
+        file_contents=$(sed -E "s;(.+)image: (.+);\1image: ${local_registry}/\2;g" "$file")
+        echo "${file_contents}" | kubectl apply -f -
+    done
+fi

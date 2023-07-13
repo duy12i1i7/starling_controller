@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# Starts Starling Server
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: deploy (options) [command]
+
+Deploys a given configuration file. By default, it will launch docker compose files.
+However if kind is detected as running, it will apply to kubernetes
+
+Example: deploy -f <config filepath> start
+
+commands:
+    no command\t Same as start
+    start\t\tDeploy given file or container
+    stop\t\tStop given file or container
+    restart\t\tRestart given file or container
+
+    example <example folder>\t\tDeploy a given example
+
+options:
+    --file/-f\t\tSpecify config file (relative to current location or absolute)
+    --build\t\tFor docker files, which locally build containers, it will force the build.
+    --pull\t\tPulls containers before starting deployment (currently only enabled for docker-compose)
+    --load\t\tFor kind deployment, will inspect the deployment file and load the relevant images into the local regsitry before deployment.
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+START=1
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        start)
+            START=1
+            shift
+            ;;
+        stop)
+            STOP=1
+            unset START
+            shift
+            ;;
+        restart)
+            START=1
+            STOP=1
+            shift
+            ;;
+        example)
+            EXAMPLE=$2
+            shift
+            shift
+            ;;
+        -f|--file)
+            FILE=$2
+            shift
+            shift
+            ;;
+        --build)
+            DC_BUILD=1
+            shift
+            ;;
+        --pull)
+            DC_PULL=1
+            shift
+            ;;
+        --load)
+            LOAD=1
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            ;;
+    esac
+done
+
+# Check if kubectl can find active connection otherwise use docker-compose
+if  [[ "$(kubectl get pods --namespace kube-system)" ]]; then
+    KUBECTL_ENABLED=1
+    echo "Kubectl has connection"
+else
+    echo "Kubectl not detected, docker-compose to be used"
+fi
+
+FILESLIST=()
+if [[ ! $EXAMPLE ]]; then
+
+    if [[ ! $FILE ]]; then
+        echo "Error: Must specify file using -f argument"
+        exit 0
+    fi
+    FILESLIST+=("$FILE")
+else
+    FOLDER="${STARLING_WORKDIR}/kubernetes/examples/${EXAMPLE}"
+    if [[ -d "$FOLDER" ]]; then
+        for file in "$FOLDER"/*; do
+            FILESLIST+=("$file")
+        done
+    else
+        echo "Example $EXAMPLE does not exist at location: $FOLDER"
+        echo "Please specify an example which exists in the examples folder"
+        exit 0
+    fi
+fi
+
+if [[ $STOP ]]; then
+    set +e
+    if [[ $KUBECTL_ENABLED ]]; then
+        for file in "${FILESLIST[@]}"; do
+            echo "Stopping configuration given by: $file"
+            kubectl delete -f "$file"
+        done
+    else
+        echo "Stopping docker compose file given by $FILE"
+        docker-compose -f "$FILE" down
+    fi
+    set -e
+fi
+
+if [[ $START ]]; then
+    if [[ $KUBECTL_ENABLED ]]; then
+        if [[ $LOAD ]]; then
+            images=()
+            echo "Finding images in deployment files"
+            for file in "${FILESLIST[@]}"; do
+                readarray image_lines < <(grep "image:" "$file")
+                # image_lines=("$(grep "image:" $file)")
+                for i in "${image_lines[@]}"; do
+                    a1="$( echo "$i" | xargs | cut -c8- )"
+                    if [[ ! "${images[*]}" =~ "${a1}" ]]; then
+                        # whatever you want to do when array doesn't contain value
+                        echo "Found Image Reference: '$a1'"
+                        images+=( "$a1" )
+                    else
+                        echo "Not Adding Image Already Found $a1"
+                    fi
+                done
+            done
+            echo
+            echo "Copying local containers across"
+            for i in "${images[@]}"; do
+                bash "${STARLING_BINDIR}/starling" utils kind-load "$i"
+            done
+            echo "All containers loaded"
+        fi
+
+        for file in "${FILESLIST[@]}"; do
+            echo "Starting configuration given by: $file"
+            local_registry="localhost:${STARLING_REGISTRY_DEFAULT_PORT}"
+            echo "Converting to use local registry at ${local_registry}"
+            file_contents=$(sed -E "s;(.+)image: (.+);\1image: ${local_registry}/\2;g" "$file")
+            echo "${file_contents}" | kubectl apply -f -
+        done
+    else
+        if [[ $DC_PULL ]]; then
+            echo "Pre-pulling containers for $FILE"
+            docker-compose -f "$FILE" pull
+        fi
+
+        echo "Starting docker compose file given by $FILE"
+        if [[ $DC_BUILD ]]; then
+            docker-compose -f "$FILE" up --build
+        else
+            docker-compose -f "$FILE" up
+        fi
+    fi
+fi

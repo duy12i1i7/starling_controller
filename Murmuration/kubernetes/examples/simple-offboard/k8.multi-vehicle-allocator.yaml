@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: allocator
+  labels:
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: allocator
+  template:
+    metadata:
+      labels:
+        app: allocator
+        version: v1
+    spec:
+      hostNetwork: true
+      shareProcessNamespace: true
+      nodeSelector:
+        name: master
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: allocator
+        image: uobflightlabstarling/starling-allocator:latest
+        imagePullPolicy: Always

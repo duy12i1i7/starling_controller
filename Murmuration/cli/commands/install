@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# Installs Base Starling Dependencies
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: install [kube/k3s?] (options?)
+
+Sudo privileges are required
+
+Usage:
+    No Arguments\tInstalls minimum requirements for running Starling Software
+    kubectl\t\tAdditionally downloads and install kubectl (For connecting to existing kubernetes instance)
+    k3s\t\t\tAddition downloads and installs k3s (For creating your own kubernetes instances)
+
+General Options
+    --skip-docker\t\tSkips Docker installation (if already installed)
+
+Options for install kube (and k3s):
+    --write-config-file file\t\tSpecify file and path of kubectl configfile
+
+Options for installing k3s
+    --node-external-ip ip\t\tSpecify the external facing IP address of the k3s server in case of multiple networks.
+
+Options for installing kind
+    --install-folder\t\tSpecify the folder to install kind into, defaults to /usr/local/bin which requires sudo
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        kubectl)
+            INSTALL_KUBE=1
+            shift
+            ;;
+        kind)
+            INSTALL_KIND=1
+            shift
+            ;;
+        k3s)
+            INSTALL_KUBE=1
+            INSTALL_K3S=1
+            shift
+            ;;
+        --install-folder)
+            KIND_INSTALL_FOLDER=$2
+            shift
+            shift
+            ;;
+        --skip-docker)
+            SKIP_DOCKER=1
+            shift
+            ;;
+        --config-file)
+            STARLING_KUBE_CONFIG_FILE_PATH=$2
+            shift
+            shift
+            ;;
+        --node-external-ip)
+            EXTERNAL_IP=$2
+            shift
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            shift # past argument
+            ;;
+    esac
+done
+echo "############ Welcome to the Starling Installer ############"
+
+declare -a RC_FILES=(
+    ~/.zshrc
+    ~/.bashrc
+)
+
+# Update system
+echo "System Update"
+sudo apt-get update &> /dev/null
+
+# Install Python and Pip
+echo "Installing Python Pip and Click"
+sudo apt-get install -y wget python3 python3-pip curl uidmap   &> /dev/null
+pip3 install click
+
+# Install YQ
+if [[ ! "$(command -v yq)" ]]; then
+    echo "Installing YQ (https://github.com/mikefarah/yq/#install) for yaml parsing"
+    sudo wget https://github.com/mikefarah/yq/releases/download/v4.24.5/yq_linux_arm64 -O /usr/bin/yq &&\
+        sudo chmod +x /usr/bin/yq
+else
+    echo "YQ already installed"
+fi
+
+# Adding starling cli exe to bashrc
+for rcfile in "${RC_FILES[@]}"; do
+    if [[ -f $rcfile ]]; then
+        echo "Adding Starling to $rcfile"
+        echo "export PATH=\"$STARLING_BINDIR:\$PATH\"" >> "$rcfile"
+        # Set KUBECONFIG environment variable otherwise it will complain that it cannot find configuration file.         
+        echo "export KUBECONFIG=~/.kube/config/k3s.yaml" >> "$rcfile"
+    fi
+done
+
+# Install docker
+if  [[ ! $SKIP_DOCKER && ! "$(command -v docker)" ]]; then
+    echo "Installing docker"
+    sudo apt-get install -y \
+        ca-certificates \
+        curl \
+        gnupg \
+        lsb-release
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+        $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt-get update -y
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+    echo "Adding user to docker group"
+    if [ ! "$(getent group docker)" ]; then
+        sudo groupadd docker
+    fi
+    sudo usermod -aG docker "$USER"
+
+    echo "You will need to log out and back again for docker to properly install"
+
+else
+    echo "Docker already exists, skipping install"
+fi
+
+# Install Kubectl
+echo "Installing kubectl utility"
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+echo "kubectl install complete"
+
+# Install Kind
+if [[ $INSTALL_KIND ]]; then
+    install_location="${KIND_INSTALL_FOLDER:-"/usr/local/bin/"}"
+    echo "Installing kind for linux to $install_location. If unsucessful, see https://kind.sigs.k8s.io/docs/user/quick-start/#installing-from-release-binaries"
+    curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.12.0/kind-linux-amd64
+    chmod +x ./kind
+    sudo mv ./kind "${install_location}"
+    echo "Kind Install Complete"
+else
+    echo "Use starling install kind for local starling test harness"
+fi
+
+# Install k3s
+if [[ $INSTALL_K3S ]]; then
+    echo "Created directory $(dirname "${STARLING_KUBE_CONFIG_FILE_PATH}") for storing config file"
+    mkdir -p "$(dirname "${STARLING_KUBE_CONFIG_FILE_PATH}")"
+
+    K3S_ADDITIONAL_ARGS="--docker --write-kubeconfig $STARLING_KUBE_CONFIG_FILE_PATH --write-kubeconfig-mode  644"
+    export INSTALL_K3S_SKIP_START=true
+    if [[ $EXTERNAL_IP ]]; then
+        echo "External IP set to ${EXTERNAL_IP}"
+        K3S_ADDITIONAL_ARGS="${K3S_ADDITIONAL_ARGS} --node-external-ip ${EXTERNAL_IP}"
+    fi
+
+    if [[ ! $INSTALL_K3S ]]; then
+        # If only install kubectl
+        echo "Only Kubectl to install, skipping k3s enable and start"
+        export INSTALL_K3S_SKIP_ENABLE=true
+    fi
+
+    # Only needs to be run once per system
+    # Download and start kubernetes master node
+    echo "Downloading and Installing K3s in systemd"
+    echo "The configuration file will be placed in $CONFIGFILE"
+    echo "root is required for initial installation (running of the kubernetes systemd)"
+    curl -sfL https://get.k3s.io | sudo bash -s -- "${K3S_ADDITIONAL_ARGS}"
+
+    echo "Setting KUBECONFIG in rcfiles"
+    for rcfile in "${RC_FILES[@]}"; do
+        if [[ -f $rcfile ]]; then
+            case $(grep -F KUBECONFIG "$rcfile" >/dev/null; echo $?) in
+                0)
+                    echo "KUBECONFIG already set in $rcfile, KUBECONFIG NOT added to $rcfile"
+                    ;;
+                1)
+                    echo "export KUBECONFIG=$STARLING_KUBE_CONFIG_FILE_PATH" >> $rcfile
+                    echo "$rcfile appended KUBECONFIG, set to $STARLING_KUBE_CONFIG_FILE_PATH"
+                    ;;
+                *)
+                    echo "Error occured in setting KUBECONFIG in $rcfile"
+                    RED='\033[0;31m'
+                    NC='\033[0m'
+                    echo "${RED}Please manually ensure that KUBECONFIG is set to $STARLING_KUBE_CONFIG_FILE_PATH in .profile or .bashrc file${NC}"
+                    ;;
+            esac
+        else
+            echo "$rcfile not found"
+        fi
+    done
+    echo "K3s or kubectl install complete"
+else
+    echo "Use starling install k3s for full system install (not recommended for most users)"
+fi
+
+echo "############ Starling Installer Complete ############"

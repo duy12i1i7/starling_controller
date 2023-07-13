@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -e
+
+STARLING_BINDIR="$(cd "$(dirname "$0")" && pwd)"
+export STARLING_BINDIR
+
+STARLING_WORKDIR="$(cd "$(dirname "$0")/.." && pwd)"
+CLIDIR="$STARLING_WORKDIR/cli"
+
+# shellcheck source=./cli/common
+source "$CLIDIR/common"
+
+cli_help() {
+    cli_name=${0##*/}
+    echo "
+$cli_name
+
+Starling CLI
+
+Usage: $cli_name [command]
+
+Commands:
+"
+
+for file in "$STARLING_COMMANDS_DIR"/*; do
+    if [[ -f "$file" && -x "$file" ]]; then
+        instruction="$(sed -n '2p' "$file")"
+        echo -e "  $(basename "$file")\t${instruction:2}"
+    fi
+done
+
+echo -e "  *\t\tHelp"
+echo ""
+
+exit 1
+}
+
+## If file exists in cli dir and is executable
+file="$STARLING_COMMANDS_DIR/$1"
+if [[ -f "$file" && -x "$file" ]]; then
+    shift;
+    exec "$file" "$@"
+else
+    if [ -n "$1" ]; then
+        echo "Command '$1' not recognised"
+    fi
+    cli_help
+fi

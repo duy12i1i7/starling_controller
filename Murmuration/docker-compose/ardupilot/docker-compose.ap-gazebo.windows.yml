@@ -1,0 +1,35 @@
+version: '3'
+
+services:
+  simhost:
+    image: uobflightlabstarling/starling-sim-iris-ap:latest
+    environment:
+      - AP_SITL_HOST=sitl
+    ports:
+      - "8080:8080"
+
+  sitl:
+    image: uobflightlabstarling/starling-sim-ardupilot-copter:latest
+    environment:
+      - AP_USE_GAZEBO=true
+      - AP_SIM_HOST=simhost
+    ports:
+      - "18570:18570/udp"
+
+  mavros:
+    image: uobflightlabstarling/starling-mavros:latest
+    command: ros2 launch launch/mavros_bridge.launch.xml
+    environment:
+      - "MAVROS_TGT_FIRMWARE=apm"
+      - "MAVROS_TGT_SYSTEM=1"
+      - "MAVROS_FCU_URL=tcp://sitl:5760"
+      - "MAVROS_GCS_URL=tcp-l://:5761"
+      - "MAVROS_CONFIG_PATH=/mavros_config_ap.yaml"
+      - "MAVROS_PLUGINLISTS_PATH=/mavros_pluginlists_ap.yaml"
+    ports:
+      - "5760:5760"
+
+  rosbridge-suite:
+    image: uobflightlabstarling/rosbridge-suite:latest
+    ports:
+      - "9090:9090"

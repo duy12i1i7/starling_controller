@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# \tStarts Starling Server
+
+set -e
+
+cli_help_install() {
+    echo -e "
+Command: status [command] (options)
+
+commands:
+
+
+options:
+    --watch\t\tWatch status
+
+"
+}
+
+# Check if running using starling cli
+if [ -z ${STARLING_COMMON_SOURCED+'check'} ]; then
+    echo "Common not sourced, please run from starling cli"
+    exit 1
+fi
+
+CLUSTER_NAME="starling-cluster"
+
+# Parse arguments
+while [[ $# -gt 0 ]]
+do
+    key="$1"
+    case $key in
+        -h|--help|help)
+            cli_help_install
+            exit 1
+            ;;
+        --watch)
+            WATCH=1
+            shift
+            ;;
+        *)  # unknown option
+            echo "Unknown Argument/ Option $1"
+            cli_help_install
+            exit 1
+            shift # past argument
+            ;;
+    esac
+done
+
+print_starling_status() {
+    NUM_VEH="$(kubectl get no -o name | grep -c worker)"
+    echo "Number of vehicles: ${NUM_VEH}"
+    echo "Nodes:"
+    kubectl get nodes
+
+    echo "Pods:"
+    kubectl get pods
+
+    echo "Deployments:"
+    kubectl get deployments
+
+    echo "StatefulSets:"
+    kubectl get StatefulSets
+
+    echo "DaemonSets"
+    kubectl get daemonsets
+}
+export -f print_starling_status
+
+if [[ $WATCH ]]; then
+    watch -n1 -x bash -c print_starling_status
+else
+    print_starling_status
+fi

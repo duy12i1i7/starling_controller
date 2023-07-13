@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: starling-controller-onboard-controller
+  labels:
+    app: starling
+    project: starling-controller
+
+spec:
+  selector:
+    matchLabels:
+      name: starling-controller-onboard-controller
+
+  template:
+    metadata:
+      labels:
+        name: starling-controller-onboard-controller
+
+    spec:
+      nodeSelector:
+        # starling.dev/vehicle-class: rotary
+        starling.dev/type: vehicle
+
+      tolerations:
+      - key: "starling.dev/type"
+        operator: "Equal"
+        value: "vehicle"
+        effect: "NoSchedule"
+
+      hostNetwork: true
+      shareProcessNamespace: true
+
+      containers:
+      - name: onboard-controller
+        image: duynd2357/starling-controller
+        imagePullPolicy: Always
+        volumeMounts:
+        - mountPath: /etc/starling/vehicle.config
+          name: vehicleconfig
+          readOnly: true
+
+      volumes:
+      - name: vehicleconfig
+        hostPath:
+          path: /etc/starling/vehicle.config
+          type: File
+---
+
+# Central montior
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: starling-controller-offboard-controller
+  labels:
+    app: starling
+    project: starling-controller
+spec:
+  selector:
+    matchLabels:
+      app:  starling-controller-offboard-controller
+  template:
+    metadata:
+      labels:
+        app: starling-controller-offboard-controller
+    spec:
+
+      hostNetwork: true
+      shareProcessNamespace: true
+
+      nodeSelector:
+        name: master
+
+      tolerations:
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
+
+      containers:
+      - name: offboard-controller
+        image: duynd2357/starling-controller
+        imagePullPolicy: Always
+        env:
+          - name: OFFBOARD
+            value: "true"
+      - name: starling-ui
+        image: uobflightlabstarling/starling-ui-example:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+      - name: rosbridge-suite
+        image: uobflightlabstarling/rosbridge-suite:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9090

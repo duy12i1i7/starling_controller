@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: starling-px4-sitl-daemon
+  labels:
+    app: starling
+
+spec:
+  selector:
+    matchLabels:
+      name: starling-px4-sitl-daemon
+
+  template:
+    metadata:
+      labels:
+        name: starling-px4-sitl-daemon
+
+    spec:
+      nodeSelector:
+        starling.dev/type: vehicle
+
+      tolerations:
+        - key: starling.dev/type
+          operator: Equal
+          value: vehicle
+          effect: NoSchedule
+
+      hostNetwork: true
+      shareProcessNamespace: true
+      initContainers:
+      - name: gazebo-spawn-iris
+        image: uobflightlabstarling/starling-sim-iris:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash"]
+        args: ["-c", "source /etc/starling/vehicle.config; /entrypoint.sh ./spawn_iris.sh" ]
+        env:
+        - name: IGNORE_FAILURE
+          value: "true"
+        - name: HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        volumeMounts:
+        - mountPath: /etc/starling/vehicle.config
+          name: vehicleconfig
+          readOnly: true
+      containers:
+        - name: starling-px4-sitl
+          image: uobflightlabstarling/starling-sim-px4-sitl:latest
+          command: ["/bin/bash"]
+          args: [ "-c", "source /etc/starling/vehicle.config; /entrypoint.sh /src/PX4-Autopilot/build/px4_sitl_default/bin/px4 -d -i ${PX4_INSTANCE} -s etc/init.d-posix/rcS -w /sim_wd /src/PX4-Autopilot/ROMFS/px4fmu_common"]
+          imagePullPolicy: Always
+          env:
+          - name: PX4_SIM_HOST
+            value: "starling-cluster-control-plane"
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          volumeMounts:
+          - mountPath: /etc/starling/vehicle.config
+            name: vehicleconfig
+            readOnly: true
+      volumes:
+        - name: vehicleconfig
+          hostPath:
+            path: /etc/starling/vehicle.config
+            type: File

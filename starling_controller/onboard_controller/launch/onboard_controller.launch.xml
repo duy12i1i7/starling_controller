@@ -1,0 +1,14 @@
+<launch>
+    <arg name="vehicle_namespace" default="$(env VEHICLE_NAMESPACE vehicle_$(env VEHICLE_MAVLINK_SYSID))" />
+
+    <group>
+        <push-ros-namespace namespace="$(var vehicle_namespace)"/>
+        <node name="controller" pkg="onboard_controller" exec="controller" output="screen" respawn="true">
+            <param name="frame_id" value="map"/>
+            <param name="setpoint_frame_id" value="$(var vehicle_namespace)/setpoint"/>
+            <param name="vehicle_frame_id" value="$(var vehicle_namespace)/body"/>
+            <param name="vehicle_id" value="$(var vehicle_namespace)"/>
+        </node>
+    </group>
+
+</launch>
