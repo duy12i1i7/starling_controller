@@ -19,7 +19,6 @@ help:
 	@echo "help - show this help screen"
 
 build:
-	@export PATH="$(pwd)/Murmuration/bin":$PATH
 	@git clone --recurse-submodules https://github.com/CD3/libInterpolate.git starling_controller/onboard_controller/external/libInterpolate
 	$(BAKE) starling_controller
 	@rm -rf starling_controller/onboard_controller/external/libInterpolate
