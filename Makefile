@@ -10,12 +10,6 @@ RUN_ARGS?=
 
 all: build
 
-delete:
-	@rm -rf starling_controller/onboard_controller/external/libInterpolate
-
-clone:
-	@git clone --recurse-submodules https://github.com/CD3/libInterpolate.git starling_controller/onboard_controller/external/libInterpolate
-
 help:
 	@echo "all - run build"
 	@echo "build - build the dockerfile for this project"
