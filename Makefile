@@ -8,7 +8,10 @@ NETWORK?=bridge
 ENV?=
 RUN_ARGS?=
 
-all: clone build
+all: build
+
+delete:
+	@rm -rf starling_controller/onboard_controller/external/libInterpolate
 
 clone:
 	@git clone --recurse-submodules https://github.com/CD3/libInterpolate.git starling_controller/onboard_controller/external/libInterpolate
@@ -22,7 +25,9 @@ help:
 	@echo "help - show this help screen"
 
 build:
+	@git clone --recurse-submodules https://github.com/CD3/libInterpolate.git starling_controller/onboard_controller/external/libInterpolate
 	$(BAKE) starling_controller
+	@rm -rf starling_controller/onboard_controller/external/libInterpolate
 
 local-build-setup:
 	docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
