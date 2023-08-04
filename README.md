@@ -6,7 +6,50 @@ This is a UAV project involving PX4 and ROS2.
 
 ## Installation
 ### Pre-requisits
-This project uses Starling as its base. Therefore you will need thos prerequisites, please see [Starling documentation](https://docs.starlinguas.dev). This is primarily docker. You do not need to clone this project.
+#### Install Docker
+##### Set up the repository
+1. Update the apt package index and install packages to allow apt to use a repository over HTTPS:
+``````
+sudo apt-get update
+sudo apt-get install ca-certificates curl gnupg
+``````
+
+2. Add Docker’s official GPG key:
+```
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+```
+
+3. Use the following command to set up the repository:
+```
+echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+```
+##### Install Docker Engine
+1. Update the apt package index:
+```    
+sudo apt-get update
+```
+2. Install Docker Engine, containerd, and Docker Compose.
+```
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+#### Preparing the template project
+1. Clone the template
+```
+git clone https://github.com/duy12i1i7/starling_controller.git
+```
+2. Preparing the image
+```
+cd starling-controller
+sudo make
+```
+
+
+
 
 ### UAV simulator
 
@@ -36,12 +79,13 @@ make build
 ## Running in Simulation
 
 ### Starling CLI
-his project then uses the [Murmuration project](https://github.com/StarlingUAS/Murmuration) in order to simplify the multi-vehicle control and simulation. Murmuration includes a Command Line interface and example scripts to help run multi-vehicle simulations. In particular the structure of these simulations directly matches the real life deployment within the flight arena.
+This project then uses the [Murmuration project](https://github.com/StarlingUAS/Murmuration) in order to simplify the multi-vehicle control and simulation. Murmuration includes a Command Line interface and example scripts to help run multi-vehicle simulations. In particular the structure of these simulations directly matches the real life deployment within the flight arena.
 
-You will need to clone the Murmuration project somewhere into your workspace, recommendation is in the parent directory to this one.
+To use Starling CLI, please use the following command line:
 ```
-git clone https://github.com/StarlingUAS/Murmuration.git
+cd starling_controller
 ```
+Note that the command line to cd into the `starling_controller` project that you cloned.
 
 Following the instructions from Murmuration, it is recommended you add the Murmuration file path to your PATH. Either run in each terminal:
 ```
@@ -50,12 +94,20 @@ export PATH="$(pwd)/bin":$PATH
 
 or add the following to the bottom of your bashrc/zshrc file:
 ```
-export PATH="<path to Marsupial root folder>/bin":$PATH
+export PATH="<path to Murmuration root folder>/bin":$PATH
 ```
 
 then with the Starling CLI on the path, you should be able to run
 ```
 starling install
+```
+If the command is not available, to use the Starling CLI, you should use the following command:
+```
+<path to Murmuration root folder>/bin/starling <any element after starling>
+```
+For example:
+```
+~/starling_controller/Murmuration/bin/starling install
 ```
 
 ### Running the simulation
