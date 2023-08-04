@@ -1,0 +1,44 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: starling-cluster
+nodes:
+- role: control-plane
+  labels:
+    name: master
+  extraPortMappings:
+  # Gazebo
+  - containerPort: 8080
+    hostPort: 8080
+  # UI
+  - containerPort: 3000
+    hostPort: 3000
+  # Rosbridge Suite
+  - containerPort: 9090
+    hostPort: 9090
+  - containerPort: 7681
+    hostPort: 7681
+  # Dashboard
+  - containerPort: 31771
+    hostPort: 31771
+  - containerPort: 11345
+    hostPort: 11345
+    protocol: UDP
+  # Mavlink out
+  - containerPort: 4560
+    hostPort: 4560
+
+- role: worker
+  labels:
+    starling.dev/type: vehicle
+  extraMounts:
+  - hostPath: /home/aselab/starling_controller/Murmuration/tmp/vehicle0.config
+    containerPath: /etc/starling/vehicle.config
+    readOnly: true
+  - hostPath: /home/aselab/starling_controller/Murmuration/tmp/px4fmu_vehicle0
+    containerPath: /dev/px4fmu
+    readOnly: true
+
+containerdConfigPatches:
+- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5001"]
+    endpoint = ["http://kind-registry:5000"]

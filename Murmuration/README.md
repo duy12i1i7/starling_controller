@@ -20,10 +20,7 @@ The only requirement of the starling cli is a terminal running a shell and git. 
 
 ### Installation
 
-There are no installation steps apart from cloneing this github repository into your local workspace.
-```console
-git clone https://github.com/StarlingUAS/Murmuration.git
-```
+There are no installation steps, Everything you need was included on Murmuration folder
 
 In the root of the repository, there is the core cli script named `starling`. `starling` includes a further installation script to help install further requirements. This installation script will need to be run using root. See the following guide on which arguments you should give.
 
