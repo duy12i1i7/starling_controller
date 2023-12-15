@@ -35,7 +35,7 @@ sudo apt-get update
 ```
 2. Install Docker Engine, containerd, and Docker Compose.
 ```
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-compose
 ```
 #### Preparing the template project
 1. Clone the template
