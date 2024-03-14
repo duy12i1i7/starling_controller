@@ -44,7 +44,7 @@ git clone https://github.com/duy12i1i7/starling_controller.git
 ```
 2. Preparing the image
 ```
-cd starling-controller
+cd starling_controller
 sudo make
 ```
 
